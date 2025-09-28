@@ -1,0 +1,16 @@
+[workspace]
+members = ["crates/io"]
+
+[package]
+name = "bamqc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rust-htslib = "0.46"
+anyhow = "1.0"
+thiserror = "1.0"
+bamqc-io = { path = "crates/io" }

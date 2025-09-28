@@ -1,0 +1,12 @@
+[package]
+name = "bamqc-io"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rust-htslib = "0.47"
+thiserror = "1.0"
+tracing = "0.1"
+
+[features]
+default = []
