@@ -72,12 +72,21 @@ name = "bamqc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bamqc-core",
  "bamqc-io",
  "clap",
  "rust-htslib 0.46.0",
  "thiserror",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "bamqc-core"
+version = "0.1.0"
+dependencies = [
+ "bamqc-io",
+ "thiserror",
 ]
 
 [[package]]

@@ -9,8 +9,3 @@ pub use bam::{BamError, BamReader, BamRecord, BamRecordIterator};
 
 /// 库版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// 预加载函数，便于快速创建BamReader
-pub fn open_bam<P: AsRef<std::path::Path>>(path: P) -> Result<BamReader, BamError> {
-    BamReader::from_path(path)
-}

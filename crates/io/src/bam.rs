@@ -20,6 +20,7 @@ pub struct BamReader {
 }
 
 impl BamReader {
+    
     /// 从文件路径创建BAM读取器
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, BamError> {
         let path_str = path.as_ref().to_string_lossy().to_string();
@@ -64,9 +65,6 @@ impl<'a> Iterator for BamRecordIterator<'a> {
         match self.inner.next() {
             Some(Ok(record)) => {
                 self.count += 1;
-                if self.count % 1_000_000 == 0 {
-                    debug!("已处理 {} 条记录", self.count);
-                }
                 Some(Ok(BamRecord { inner: record }))
             }
             Some(Err(e)) => Some(Err(BamError::IoError(e))),
