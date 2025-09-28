@@ -72,21 +72,12 @@ name = "bamqc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bamqc-core",
  "bamqc-io",
  "clap",
- "rust-htslib 0.46.0",
- "thiserror",
+ "rust-htslib 0.50.0",
+ "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "bamqc-core"
-version = "0.1.0"
-dependencies = [
- "bamqc-io",
- "thiserror",
 ]
 
 [[package]]
@@ -94,7 +85,7 @@ name = "bamqc-io"
 version = "0.1.0"
 dependencies = [
  "rust-htslib 0.47.1",
- "thiserror",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -128,7 +119,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "strum_macros",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -283,6 +274,17 @@ name = "derive-new"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cdc8d50f426189eef89dac62fabfa0abb27d5cc008f25bf4156a0203325becc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -750,28 +752,6 @@ checksum = "caf4aa5b0f434c91fe5c7f1ecb6a5ece2130b02ad2a590589dda5146df959001"
 
 [[package]]
 name = "rust-htslib"
-version = "0.46.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aec6f9ca4601beb4ae75ff8c99144dd15de5a873f6adf058da299962c760968e"
-dependencies = [
- "bio-types",
- "byteorder",
- "custom_derive",
- "derive-new 0.5.9",
- "hts-sys",
- "ieee754",
- "lazy_static",
- "libc",
- "libz-sys",
- "linear-map",
- "newtype_derive",
- "regex",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "rust-htslib"
 version = "0.47.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f62b46e47d8b025589565f0eefe83e8646faf0faf74d17014b1b6ea2c1504930"
@@ -788,7 +768,29 @@ dependencies = [
  "linear-map",
  "newtype_derive",
  "regex",
- "thiserror",
+ "thiserror 1.0.69",
+ "url",
+]
+
+[[package]]
+name = "rust-htslib"
+version = "0.50.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7ec28c79f6b9ba90c45b33a519724708558dcaf73a3e37179586b8da9890630"
+dependencies = [
+ "bio-types",
+ "byteorder",
+ "custom_derive",
+ "derive-new 0.7.0",
+ "hts-sys",
+ "ieee754",
+ "lazy_static",
+ "libc",
+ "libz-sys",
+ "linear-map",
+ "newtype_derive",
+ "regex",
+ "thiserror 2.0.16",
  "url",
 ]
 
@@ -934,7 +936,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
+dependencies = [
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -942,6 +953,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",

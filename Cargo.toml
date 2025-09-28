@@ -1,5 +1,13 @@
 [workspace]
-members = ["crates/io"]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+rust-htslib = "0.47"
 
 [package]
 name = "bamqc"
@@ -7,10 +15,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.4", features = ["derive"] }
-tracing = "0.1"
+clap = { version = "4.5.48", features = ["derive"] }
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rust-htslib = "0.46"
-anyhow = "1.0"
-thiserror = "1.0"
+anyhow = { workspace = true }
 bamqc-io = { path = "crates/io" }
+bamqc-core = { path = "crates/core" }
