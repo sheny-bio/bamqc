@@ -73,7 +73,7 @@ impl BamReader {
     }
 
     /// 迭代所有记录
-    pub fn records(&mut self) -> BamRecordIterator {
+    pub fn records(&mut self) -> BamRecordIterator<'_> {
         BamRecordIterator {
             reader: &mut self.reader,
             count: 0,
