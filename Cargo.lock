@@ -90,8 +90,10 @@ dependencies = [
 name = "bamqc-core"
 version = "0.1.0"
 dependencies = [
+ "bamqc-io",
  "clap",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

@@ -5,34 +5,21 @@
 
 use std::collections::HashMap;
 use thiserror::Error;
+use bamqc_io::bam::{BamReader, BamError};
+use tracing::{info, warn, debug};
 
 /// 插入片段大小计算的配对方向类型。
 /// 
 /// 表示配对末端读长在参考基因组中相对于彼此的不同方向。
-/// 
-/// # Examples
-/// 
-/// ```rust
-/// use bamqc_core::PairOrientation;
-/// 
-/// let orientation = PairOrientation::Fr;
-/// assert_eq!(orientation.to_string(), "FR");
-/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, clap::ValueEnum)]
 pub enum PairOrientation {
     /// Forward-Reverse方向（典型的文库制备方式）。
-    /// 
-    /// 第一个读长比对到正向链，第二个读长比对到反向链。
     #[clap(name = "fr")]
     Fr,
     /// Reverse-Forward方向。
-    /// 
-    /// 第一个读长比对到反向链，第二个读长比对到正向链。
     #[clap(name = "rf")]
     Rf,
     /// 串联方向。
-    /// 
-    /// 两个读长都比对到同一条链（要么都是正向，要么都是反向）。
     #[clap(name = "tandem")]
     Tandem,
 }
@@ -48,25 +35,15 @@ impl std::fmt::Display for PairOrientation {
 }
 
 /// 选择用于插入片段大小计算的配对方向策略。
-/// 
-/// 当数据中存在多种配对方向时，此枚举决定使用哪一种
-/// 来进行最终的插入片段大小计算。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Strategy {
     /// 使用指定的配对方向类别。
-    /// 
-    /// 如果指定的方向不满足最小百分比阈值，将返回错误。
     Specific,
     /// 使用主导的配对方向类别。
-    /// 
-    /// 在满足最小百分比阈值的方向中选择读长数量最多的那个。
     Dominant,
 }
 
 /// 插入片段大小计算过程中可能发生的错误。
-/// 
-/// 这些错误表示从配对末端测序数据计算插入片段大小时的
-/// 各种失败模式。
 #[derive(Error, Debug)]
 pub enum InsertSizeError {
     /// 没有可用于计算的有效配对读长。
@@ -100,11 +77,15 @@ pub enum InsertSizeError {
     /// 最小百分比必须在0.0和0.5之间（含边界值）。
     #[error("min_pct必须在[0, 0.5]之间")]
     InvalidMinPct,
+    
+    /// BAM文件IO错误。
+    /// 
+    /// 当读取BAM文件时发生IO错误时发生。
+    #[error("BAM文件IO错误: {0}")]
+    BamError(#[from] BamError),
 }
 
 /// 插入片段大小统计结果。
-/// 
-/// 存储不同配对方向的插入片段大小分布统计信息。
 #[derive(Debug)]
 pub struct InsertSizeStats {
     /// 各方向的插入大小计数直方图。
@@ -307,5 +288,128 @@ impl InsertSizeCalculator {
     }
 }
 
+/// 计算插入片段大小。
+/// 
+/// 从BAM文件中读取配对末端测序数据，计算插入片段大小的中位数。
+/// 支持多种过滤条件和计算策略。
+/// 
+/// # Parameters
+/// 
+/// * `bam_path` - BAM文件路径
+/// * `include_duplicates` - 是否包含标记为duplicate的读对
+/// * `require_proper_pair` - 是否只统计proper pair
+/// * `min_pct` - 类别最小占比阈值，丢弃占比低于该阈值的FR/RF/TANDEM类别
+/// * `orientation_pref` - 首选的配对方向
+/// * `strategy` - 输出策略（Specific或Dominant）
+/// 
+/// # Returns
+/// 
+/// 成功时返回计算得到的插入片段大小中位数，失败时返回相应错误。
+pub fn compute_insert_size(
+    bam_path: &str,
+    include_duplicates: bool,
+    require_proper_pair: bool,
+    min_pct: f64,
+    orientation_pref: PairOrientation,
+    strategy: Strategy,
+) -> Result<i32, InsertSizeError> {
+    let mut reader = BamReader::from_path(bam_path)?;
+    let mut stats = InsertSizeStats::new();
 
-pub fn calculate_insert_size(
+    info!("开始处理BAM文件: {}", bam_path);
+    
+    let mut processed_records = 0;
+    let mut filtered_records = 0;
+
+    for result in reader.records() {
+        let record = result?;
+        processed_records += 1;
+
+        if processed_records % 1_000_000 == 0 {
+            debug!("已处理 {} 条记录", processed_records);
+        }
+
+        // 基础过滤
+        if !record.is_paired() {
+            continue;
+        }
+        if record.is_secondary() || record.is_supplementary() {
+            continue;
+        }
+        if !include_duplicates && record.is_duplicate() {
+            continue;
+        }
+        if record.is_unmapped() || record.is_mate_unmapped() {
+            continue;
+        }
+        if record.tid() != record.mtid() {
+            continue;
+        }
+        if require_proper_pair && !record.is_proper_pair() {
+            continue;
+        }
+
+        let tlen = record.insert_size();
+        
+        // 只计"左端记录"（TLEN > 0）
+        if tlen <= 0 {
+            continue;
+        }
+
+        let insert_size = tlen.abs() as i32;
+        if insert_size == 0 {
+            continue;
+        }
+
+        let orientation = determine_pair_orientation(record.is_reverse(), record.is_mate_reverse());
+        stats.add_insert_size(orientation, insert_size);
+        filtered_records += 1;
+    }
+
+    info!("处理完成：总记录数 {}，有效左端记录数 {}", processed_records, filtered_records);
+
+    // 使用 InsertSizeCalculator 来计算最终结果
+    let result = InsertSizeCalculator::calculate(&stats, min_pct, orientation_pref, strategy)?;
+    
+    // 记录保留的类别信息
+    for (orientation, counts) in &stats.histograms {
+        let count: u32 = counts.values().sum();
+        if count == 0 {
+            continue;
+        }
+        let pct = count as f64 / stats.total_left_records as f64;
+        if pct >= min_pct {
+            info!("保留类别 {}: {} 个读对 ({:.2}%)", orientation, count, pct * 100.0);
+        } else {
+            warn!("丢弃类别 {}: {} 个读对 ({:.2}%) < {:.1}%", orientation, count, pct * 100.0, min_pct * 100.0);
+        }
+    }
+
+    match strategy {
+        Strategy::Specific => {
+            info!("使用指定方向 {} 的中位数: {}", orientation_pref, result);
+        }
+        Strategy::Dominant => {
+            // 找到最大类别
+            let best_orientation = stats.histograms
+                .iter()
+                .filter_map(|(orientation, counts)| {
+                    let count: u32 = counts.values().sum();
+                    let pct = count as f64 / stats.total_left_records as f64;
+                    if pct >= min_pct {
+                        Some((orientation, count))
+                    } else {
+                        None
+                    }
+                })
+                .max_by_key(|(_, count)| *count)
+                .map(|(orientation, _)| orientation);
+            
+            if let Some(best_orientation) = best_orientation {
+                info!("使用最大类别 {} 的中位数: {}", best_orientation, result);
+            }
+        }
+    }
+
+    Ok(result)
+}
