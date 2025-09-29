@@ -1,8 +1,7 @@
 use clap::Parser;
-use rust_htslib::{bam, bam::Read};
+use bamqc_io::bam::{BamReader, BamRecord, BamError};
 use std::collections::HashMap;
 use std::path::Path;
-use thiserror::Error;
 use tracing::{error, info, warn, debug};
 
 /// 与Picard CollectInsertSizeMetrics一致的插入片段长度计算工具
@@ -72,10 +71,10 @@ enum Strategy {
 }
 
 /// 自定义错误类型
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 enum BamQcError {
     #[error("BAM文件读取错误: {0}")]
-    BamReadError(#[from] rust_htslib::errors::Error),
+    BamReadError(#[from] BamError),
     #[error("过滤后没有可用于计算的配对读（TLEN>0的左端记录为空）")]
     NoValidReads,
     #[error("所有方向类别占比均 < MINIMUM_PCT={min_pct:.3}，无法给出insert_size")]
@@ -125,7 +124,7 @@ impl InsertSizeStats {
 /// - 左端为正(+)且右端为负(-) -> FR（常见文库）
 /// - 左端为负(-)且右端为正(+) -> RF  
 /// - 同向(++, --) -> TANDEM
-fn determine_pair_orientation(record: &bam::Record) -> PairOrientation {
+fn determine_pair_orientation(record: &BamRecord) -> PairOrientation {
     let left_reverse = record.is_reverse();     // 左端（当前记录）
     let right_reverse = record.is_mate_reverse(); // 右端（mate）
 
@@ -178,7 +177,7 @@ fn compute_insert_size(
         return Err(BamQcError::InvalidMinPct);
     }
 
-    let mut reader = bam::Reader::from_path(bam_path)?;
+    let mut reader = BamReader::from_path(bam_path)?;
     let mut stats = InsertSizeStats::new();
 
     info!("开始处理BAM文件: {}", bam_path);
