@@ -118,7 +118,7 @@ fn compute_insert_size(
     info!("处理完成：总记录数 {}，有效左端记录数 {}", processed_records, filtered_records);
 
     // 使用 InsertSizeCalculator 来计算最终结果
-    let result = InsertSizeCalculator::calculate_from_stats(&stats, min_pct, orientation_pref, strategy)?;
+    let result = InsertSizeCalculator::calculate(&stats, min_pct, orientation_pref, strategy)?;
     
     // 记录保留的类别信息
     for (orientation, counts) in &stats.histograms {

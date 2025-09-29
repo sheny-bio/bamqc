@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.server.path": "/dssg/home/sheny/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer",
+    "rust-analyzer.trace.server": "messages",
+    "rust-analyzer.server.extraEnv": { "RA_LOG": "info" }
+
+}
