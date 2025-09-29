@@ -1,6 +1,6 @@
 use noodles::bam::{self, io::Reader};
 use noodles::bgzf;
-use noodles::sam::{self, alignment::record::Flags};
+use noodles::sam::{self};
 use std::fs::File;
 use std::path::Path;
 use thiserror::Error;
@@ -110,62 +110,77 @@ pub struct BamRecord {
 }
 
 impl BamRecord {
-    /// 检查是否为配对读
-    #[inline]
-    pub fn is_paired(&self) -> bool {
-        self.inner.flags().contains(Flags::SEGMENTED)
+
+    /// 是否为配对读; 对应flag: 0x1
+    pub fn is_segmented(&self) -> bool {
+        self.inner.flags().is_segmented()
     }
 
-    /// 检查是否为secondary alignment
-    #[inline]
-    pub fn is_secondary(&self) -> bool {
-        self.inner.flags().contains(Flags::SECONDARY)
+    
+    /// 是否为主要读对; 对应flag: 0x2
+    pub fn is_properly_segmented(&self) -> bool {
+        self.inner.flags().is_properly_segmented()
     }
 
-    /// 检查是否为supplementary alignment
-    #[inline]
-    pub fn is_supplementary(&self) -> bool {
-        self.inner.flags().contains(Flags::SUPPLEMENTARY)
-    }
-
-    /// 检查是否标记为duplicate
-    #[inline]
-    pub fn is_duplicate(&self) -> bool {
-        self.inner.flags().contains(Flags::DUPLICATE)
-    }
-
-    /// 检查是否未映射
-    #[inline]
+    /// reads未能比对到参考序列; 对应flag: 0x4
     pub fn is_unmapped(&self) -> bool {
-        self.inner.flags().contains(Flags::UNMAPPED)
+        self.inner.flags().is_unmapped()
     }
 
-    /// 检查mate是否未映射
-    #[inline]
+    /// 配对reads的mate未能比对到参考序列; 对应flag: 0x8
     pub fn is_mate_unmapped(&self) -> bool {
-        self.inner.flags().contains(Flags::MATE_UNMAPPED)
+        self.inner.flags().is_mate_unmapped()
     }
 
-    /// 检查是否为proper pair
-    #[inline]
-    pub fn is_proper_pair(&self) -> bool {
-        self.inner.flags().contains(Flags::PROPERLY_SEGMENTED)
+    /// reads是否为反向链; 对应flag: 0x10
+    pub fn is_reverse_complemented(&self) -> bool {
+        self.inner.flags().is_reverse_complemented()
     }
 
-    /// 检查是否为reverse链
-    #[inline]
     pub fn is_reverse(&self) -> bool {
-        self.inner.flags().contains(Flags::REVERSE_COMPLEMENTED)
+        self.inner.flags().is_reverse_complemented()
     }
 
-    /// 检查mate是否为reverse链
-    #[inline]
+    /// 配对reads的mate是否为反向链; 对应flag: 0x20
+    pub fn is_mate_reverse_complemented(&self) -> bool {
+        self.inner.flags().is_mate_reverse_complemented()
+    }
+
     pub fn is_mate_reverse(&self) -> bool {
-        self.inner.flags().contains(Flags::MATE_REVERSE_COMPLEMENTED)
+        self.inner.flags().is_mate_reverse_complemented()
+    }
+    
+    /// reads是否在5'端; 对应flag: 0x40
+    pub fn is_first_segment(&self) -> bool {
+        self.inner.flags().is_first_segment()
     }
 
-    /// 获取参考序列ID
-    #[inline]
+    /// reads是否在3'端; 对应flag: 0x80
+    pub fn is_last_segment(&self) -> bool {
+        self.inner.flags().is_last_segment()
+    }
+
+    /// 是否为次要比对; 对应flag: 0x100
+    pub fn is_secondary(&self) -> bool {
+        self.inner.flags().is_secondary()
+    }
+
+    /// 是否为QC失败; 对应flag: 0x200
+    pub fn is_qc_fail(&self) -> bool {
+        self.inner.flags().is_qc_fail()
+    }
+
+    /// 是否为重复reads; 对应flag: 0x400
+    pub fn is_duplicate(&self) -> bool {
+        self.inner.flags().is_duplicate()
+    }
+
+    /// 是否为补充比对信息; 对应flag: 0x800
+    pub fn is_supplementary(&self) -> bool {
+        self.inner.flags().is_supplementary()
+    }
+  
+    /// 参考序列ID
     pub fn tid(&self) -> i32 {
         match self.inner.reference_sequence_id() {
             Some(Ok(id)) => id as i32,
@@ -173,8 +188,7 @@ impl BamRecord {
         }
     }
 
-    /// 获取mate的参考序列ID
-    #[inline]
+    /// mate的参考序列ID
     pub fn mtid(&self) -> i32 {
         match self.inner.mate_reference_sequence_id() {
             Some(Ok(id)) => id as i32,
@@ -182,14 +196,8 @@ impl BamRecord {
         }
     }
 
-    /// 获取模板长度(insert size)
-    #[inline]
+
     pub fn insert_size(&self) -> i64 {
         self.inner.template_length() as i64
-    }
-
-    /// 获取底层noodles记录的引用
-    pub fn inner(&self) -> &bam::Record {
-        &self.inner
     }
 }

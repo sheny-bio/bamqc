@@ -330,7 +330,7 @@ pub fn compute_insert_size(
         }
 
         // 基础过滤
-        if !record.is_paired() {
+        if !record.is_segmented() {
             continue;
         }
         if record.is_secondary() || record.is_supplementary() {
@@ -345,7 +345,7 @@ pub fn compute_insert_size(
         if record.tid() != record.mtid() {
             continue;
         }
-        if require_proper_pair && !record.is_proper_pair() {
+        if require_proper_pair && !record.is_properly_segmented() {
             continue;
         }
 
