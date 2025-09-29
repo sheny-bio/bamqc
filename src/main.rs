@@ -1,6 +1,9 @@
 use clap::Parser;
-use bamqc_io::bam::{BamReader, BamRecord, BamError};
-use std::collections::HashMap;
+use bamqc_io::bam::{BamReader, BamError};
+use bamqc_core::{
+    PairOrientation, Strategy, InsertSizeError, InsertSizeStats, 
+    InsertSizeCalculator, determine_pair_orientation
+};
 use std::path::Path;
 use tracing::{error, info, warn, debug};
 
@@ -37,132 +40,18 @@ struct Args {
     verbose: bool,
 }
 
-/// 配对方向枚举
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, clap::ValueEnum)]
-enum PairOrientation {
-    /// Forward-Reverse方向（常见文库）
-    #[clap(name = "fr")]
-    Fr,
-    /// Reverse-Forward方向
-    #[clap(name = "rf")]
-    Rf,
-    /// 同向配对
-    #[clap(name = "tandem")]
-    Tandem,
-}
-
-impl std::fmt::Display for PairOrientation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PairOrientation::Fr => write!(f, "FR"),
-            PairOrientation::Rf => write!(f, "RF"),
-            PairOrientation::Tandem => write!(f, "TANDEM"),
-        }
-    }
-}
-
-/// 输出策略枚举
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-enum Strategy {
-    /// 输出指定的配对方向类别
-    Specific,
-    /// 输出保留类别中读数最多的那一类
-    Dominant,
-}
 
 /// 自定义错误类型
 #[derive(thiserror::Error, Debug)]
 enum BamQcError {
     #[error("BAM文件读取错误: {0}")]
     BamReadError(#[from] BamError),
-    #[error("过滤后没有可用于计算的配对读（TLEN>0的左端记录为空）")]
-    NoValidReads,
-    #[error("所有方向类别占比均 < MINIMUM_PCT={min_pct:.3}，无法给出insert_size")]
-    AllCategoriesFiltered { min_pct: f64 },
-    #[error("所选方向 {orientation} 被MINIMUM_PCT={min_pct:.3}丢弃，可降低阈值或改用dominant策略")]
-    OrientationFiltered {
-        orientation: PairOrientation,
-        min_pct: f64,
-    },
-    #[error("min_pct必须在[0, 0.5]之间")]
-    InvalidMinPct,
+    #[error("插入片段大小计算错误: {0}")]
+    InsertSizeError(#[from] InsertSizeError),
 }
 
-/// 插入大小统计结果
-#[derive(Debug)]
-struct InsertSizeStats {
-    /// 各方向的插入大小计数
-    histograms: HashMap<PairOrientation, HashMap<i32, u32>>,
-    /// 总的左端记录数
-    total_left_records: u32,
-}
 
-impl InsertSizeStats {
-    /// 创建新的统计实例
-    fn new() -> Self {
-        let mut histograms = HashMap::new();
-        histograms.insert(PairOrientation::Fr, HashMap::new());
-        histograms.insert(PairOrientation::Rf, HashMap::new());
-        histograms.insert(PairOrientation::Tandem, HashMap::new());
-        
-        Self {
-            histograms,
-            total_left_records: 0,
-        }
-    }
 
-    /// 添加一个插入大小记录
-    fn add_insert_size(&mut self, orientation: PairOrientation, size: i32) {
-        *self.histograms.get_mut(&orientation).unwrap().entry(size).or_insert(0) += 1;
-        self.total_left_records += 1;
-    }
-}
-
-/// 确定配对方向（仅在TLEN > 0时调用）
-/// 
-/// 根据Picard/HTSJDK的FR/RF/TANDEM语义：
-/// - 左端为正(+)且右端为负(-) -> FR（常见文库）
-/// - 左端为负(-)且右端为正(+) -> RF  
-/// - 同向(++, --) -> TANDEM
-fn determine_pair_orientation(record: &BamRecord) -> PairOrientation {
-    let left_reverse = record.is_reverse();     // 左端（当前记录）
-    let right_reverse = record.is_mate_reverse(); // 右端（mate）
-
-    if left_reverse == right_reverse {
-        PairOrientation::Tandem
-    } else if !left_reverse && right_reverse {
-        PairOrientation::Fr
-    } else {
-        PairOrientation::Rf
-    }
-}
-
-/// 从计数HashMap计算中位数
-/// 
-/// 按直方图"累计频数首次 >= 50%"所在bin的key作为中位数（整数）
-/// 与Picard/HTSJDK的Histogram分位实现一致（不取两数均值）
-fn calculate_median_from_counts(counts: &HashMap<i32, u32>) -> i32 {
-    if counts.is_empty() {
-        return 0;
-    }
-
-    let total: u32 = counts.values().sum();
-    let threshold = (total + 1) / 2; // "上中位"门槛：1-based计数
-    
-    let mut sorted_sizes: Vec<i32> = counts.keys().copied().collect();
-    sorted_sizes.sort();
-    
-    let mut running = 0;
-    for size in sorted_sizes {
-        running += counts[&size];
-        if running >= threshold {
-            return size;
-        }
-    }
-    
-    // 理论不可达
-    *counts.keys().max().unwrap_or(&0)
-}
 
 /// 计算插入片段大小
 fn compute_insert_size(
@@ -173,10 +62,6 @@ fn compute_insert_size(
     orientation_pref: PairOrientation,
     strategy: Strategy,
 ) -> Result<i32, BamQcError> {
-    if !(0.0..=0.5).contains(&min_pct) {
-        return Err(BamQcError::InvalidMinPct);
-    }
-
     let mut reader = BamReader::from_path(bam_path)?;
     let mut stats = InsertSizeStats::new();
 
@@ -225,19 +110,17 @@ fn compute_insert_size(
             continue;
         }
 
-        let orientation = determine_pair_orientation(&record);
+        let orientation = determine_pair_orientation(record.is_reverse(), record.is_mate_reverse());
         stats.add_insert_size(orientation, insert_size);
         filtered_records += 1;
     }
 
     info!("处理完成：总记录数 {}，有效左端记录数 {}", processed_records, filtered_records);
 
-    if stats.total_left_records == 0 {
-        return Err(BamQcError::NoValidReads);
-    }
-
-    // 按MINIMUM_PCT过滤类别
-    let mut kept_categories = HashMap::new();
+    // 使用 InsertSizeCalculator 来计算最终结果
+    let result = InsertSizeCalculator::calculate_from_stats(&stats, min_pct, orientation_pref, strategy)?;
+    
+    // 记录保留的类别信息
     for (orientation, counts) in &stats.histograms {
         let count: u32 = counts.values().sum();
         if count == 0 {
@@ -245,40 +128,39 @@ fn compute_insert_size(
         }
         let pct = count as f64 / stats.total_left_records as f64;
         if pct >= min_pct {
-            kept_categories.insert(*orientation, (count, counts));
             info!("保留类别 {}: {} 个读对 ({:.2}%)", orientation, count, pct * 100.0);
         } else {
             warn!("丢弃类别 {}: {} 个读对 ({:.2}%) < {:.1}%", orientation, count, pct * 100.0, min_pct * 100.0);
         }
     }
 
-    if kept_categories.is_empty() {
-        return Err(BamQcError::AllCategoriesFiltered { min_pct });
-    }
-
     match strategy {
         Strategy::Specific => {
-            if let Some((_, counts)) = kept_categories.get(&orientation_pref) {
-                let median = calculate_median_from_counts(counts);
-                info!("使用指定方向 {} 的中位数: {}", orientation_pref, median);
-                Ok(median)
-            } else {
-                Err(BamQcError::OrientationFiltered {
-                    orientation: orientation_pref,
-                    min_pct,
-                })
-            }
+            info!("使用指定方向 {} 的中位数: {}", orientation_pref, result);
         }
         Strategy::Dominant => {
-            let (best_orientation, (_, counts)) = kept_categories
+            // 找到最大类别
+            let best_orientation = stats.histograms
                 .iter()
-                .max_by_key(|(_, (count, _))| *count)
-                .unwrap();
-            let median = calculate_median_from_counts(counts);
-            info!("使用最大类别 {} 的中位数: {}", best_orientation, median);
-            Ok(median)
+                .filter_map(|(orientation, counts)| {
+                    let count: u32 = counts.values().sum();
+                    let pct = count as f64 / stats.total_left_records as f64;
+                    if pct >= min_pct {
+                        Some((orientation, count))
+                    } else {
+                        None
+                    }
+                })
+                .max_by_key(|(_, count)| *count)
+                .map(|(orientation, _)| orientation);
+            
+            if let Some(best_orientation) = best_orientation {
+                info!("使用最大类别 {} 的中位数: {}", best_orientation, result);
+            }
         }
     }
+
+    Ok(result)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
