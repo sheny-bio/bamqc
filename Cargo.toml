@@ -4,10 +4,10 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1"
-thiserror = "1"
+thiserror = "2.0.17"
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
-noodles = { version = "0.84", features = ["bam", "sam", "core", "bgzf"] }
+noodles = { version = "0.101.0", features = ["bam", "sam", "core", "bgzf", "bed"] }
 
 [package]
 name = "bamqc"
@@ -19,6 +19,7 @@ clap = { version = "4.5.48", features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = { workspace = true }
+noodles = { workspace = true }
 thiserror = { workspace = true }
 bamqc-io = { path = "crates/io" }
 bamqc-core = { path = "crates/core" }

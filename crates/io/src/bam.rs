@@ -1,5 +1,5 @@
 use noodles::bam::{self, io::Reader};
-use noodles::bgzf;
+use noodles::bgzf::io::Reader as BgzfReader;
 use noodles::sam::{self};
 use std::fs::File;
 use std::path::Path;
@@ -24,7 +24,7 @@ pub enum BamError {
 
 /// BAM/CRAM文件读取器
 pub struct BamReader {
-    reader: Reader<bgzf::Reader<File>>,
+    reader: Reader<BgzfReader<File>>,
     header: sam::Header,
     path: String,
 }
@@ -83,7 +83,7 @@ impl BamReader {
 
 /// BAM记录迭代器
 pub struct BamRecordIterator<'a> {
-    reader: &'a mut Reader<bgzf::Reader<File>>,
+    reader: &'a mut Reader<BgzfReader<File>>,
     count: u64,
 }
 
